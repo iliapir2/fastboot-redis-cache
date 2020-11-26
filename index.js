@@ -1,40 +1,44 @@
-'use strict';
+"use strict";
 
-const redis = require('redis');
+const redis = require("redis");
 
 const FIVE_MINUTES = 5 * 60;
 
 class RedisCache {
   constructor(options) {
-    let client = this.client = redis.createClient({
+    const client = (this.client = redis.createClient({
       host: options.host,
-      port: options.port
-    });
+      port: options.port,
+    }));
 
     this.expiration = options.expiration || FIVE_MINUTES;
     this.connected = false;
-    this.cacheKey = typeof options.cacheKey === 'function' ?
-      options.cacheKey : (path) => path;
+    this.cacheKey =
+      typeof options.cacheKey === "function"
+        ? options.cacheKey
+        : (path) => path;
 
-    client.on('error', error => {
+    client.on("error", (error) => {
       this.ui.writeLine(`redis error; err=${error}`);
     });
 
-    this.client.on('connect', () => {
+    this.client.on("connect", () => {
       this.connected = true;
-      this.ui.writeLine('redis connected');
+      this.ui.writeLine("redis connected");
     });
 
-    this.client.on('end', () => {
+    this.client.on("end", () => {
       this.connected = false;
-      this.ui.writeLine('redis disconnected');
+      this.ui.writeLine("redis disconnected");
     });
   }
 
   fetch(path, request) {
-    if (!this.connected) { return; }
+    if (!this.connected) {
+      return new Promise((res, rej) => rej());
+    }
 
-    let key = this.cacheKey(path, request);
+    const key = this.cacheKey(path, request);
 
     return new Promise((res, rej) => {
       this.client.get(key, (err, reply) => {
@@ -48,25 +52,33 @@ class RedisCache {
   }
 
   put(path, body, response) {
-    if (!this.connected) { return; }
+    if (!this.connected) {
+      return new Promise((res, rej) => rej());
+    }
 
-    let request = response && response.req;
-    let key = this.cacheKey(path, request);
+    const request = response && response.req;
+    const key = this.cacheKey(path, request);
 
     return new Promise((res, rej) => {
-      let statusCode = response && response.statusCode;
-      let statusCodeStr = statusCode && (statusCode + '');
+      const statusCode = response && response.statusCode;
+      const statusCodeStr = statusCode && statusCode + "";
 
-      if (statusCodeStr && statusCodeStr.length &&
-         (statusCodeStr.charAt(0) === '4' || statusCodeStr.charAt(0) === '5' || statusCodeStr.charAt(0) === '3')) {
+      if (
+        statusCodeStr &&
+        statusCodeStr.length &&
+        (statusCodeStr.charAt(0) === "4" ||
+          statusCodeStr.charAt(0) === "5" ||
+          statusCodeStr.charAt(0) === "3")
+      ) {
         res();
         return;
       }
 
-      this.client.multi()
+      this.client
+        .multi()
         .set(key, body)
         .expire(path, this.expiration)
-        .exec(err => {
+        .exec((err) => {
           if (err) {
             rej(err);
           } else {
